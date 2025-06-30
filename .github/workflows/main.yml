@@ -1,4 +1,5 @@
-name: Build and Deploy Java image
+name: Build Scan and push hub
+
 on:
   push:
     branches:
@@ -28,14 +29,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v2
-        with:
-          context: javapack
-          file: javapack/Dockerfile
-          push: true
-          tags: |
-             ${{ secrets.DOCKER_USERNAME }}/javemayexample:${{ github.run_number }}
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.run_number }} -f javapack/Dockerfile javapack
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Scan Docker image for vulnerabilities
+        run: |
+          trivy image --severity CRITICAL ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.run_number }}
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.run_number }}
 
       - name: Logout from Docker Hub
         run: docker logout
